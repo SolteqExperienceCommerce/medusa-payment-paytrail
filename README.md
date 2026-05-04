@@ -59,6 +59,14 @@ yarn medusa plugin:add @solteq/medusa-payment-paytrail
 yarn install
 ```
 
+If your Medusa app is running in a Docker container for development, ensure your app Dockerfile copies local yalc content too:
+
+```dockerfile
+# Copy package files
+# ... other copies
+COPY .yalc ./.yalc
+```
+
 ### 3. `medusa-config.ts`
 
 Ensure this plugin entry exists in your `plugins` array:
