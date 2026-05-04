@@ -56,25 +56,36 @@ Change to your Medusa app directory, then run:
 ```bash
 cd <your-medusa-app>
 yarn medusa plugin:add @solteq/medusa-payment-paytrail
+yarn install
 ```
 
 ### 3. `medusa-config.ts`
 
-If needed, ensure this plugin entry exists in your `plugins` array:
+Ensure this plugin entry exists in your `plugins` array:
 
 ```ts
-plugins: [
-	{
-		resolve: "@solteq/medusa-payment-paytrail",
-		options: {
-			merchantId: process.env.PAYTRAIL_MERCHANT_ID,
-			secretKey: process.env.PAYTRAIL_SECRET_KEY,
-			platformName: process.env.PAYTRAIL_PLATFORM_NAME || "MedusaJS",
-			callbackBaseUrl: process.env.PAYTRAIL_CALLBACK_BASE_URL,
-			language: process.env.PAYTRAIL_LANGUAGE || "EN",
-		},
-	},
-],
+  plugins: [
+    {
+      resolve: "@solteq/medusa-payment-paytrail",
+      options: {},
+    },
+  ],  
+   modules: [
+    {
+      resolve: "@medusajs/medusa/payment",
+      options: {
+        providers: [
+          {
+            resolve: "@solteq/medusa-payment-paytrail/providers/paytrail",
+            id: "paytrail",
+            options: {
+              merchantId: Number(process.env.PAYTRAIL_MERCHANT_ID ?? "375917"),
+              secretKey: process.env.PAYTRAIL_SECRET_KEY ?? "SAIPPUAKAUPPIAS",
+              platformName: process.env.PAYTRAIL_PLATFORM_NAME ?? "MedusaJS",
+              callbackBaseUrl: process.env.PAYTRAIL_CALLBACK_BASE_URL,
+              language: process.env.PAYTRAIL_LANGUAGE ?? "EN",
+            },
+          },
 ```
 
 ### 4. Configure environment variables
