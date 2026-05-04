@@ -12,7 +12,7 @@
     "sourceMap": false,
     "inlineSourceMap": true,
     "outDir": "./.medusa/server",
-    "rootDir": "./src",
+    "rootDir": "./",
     "jsx": "react-jsx",
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
@@ -23,7 +23,7 @@
     "swc": true
   },
   "include": [
-    "src/**/*"
+    "**/*"
   ],
   "exclude": [
     "node_modules",

@@ -11,10 +11,13 @@
   ],
   "author": "Solteq",
   "license": "MIT",
+  "files": [
+    ".medusa/server"
+  ],
   "exports": {
     "./package.json": "./package.json",
-    "./providers/*": "./.medusa/server/providers/*/index.js",
-    "./*": "./.medusa/server/*.js"
+    "./providers/*": "./.medusa/server/src/providers/*/index.js",
+    "./*": "./.medusa/server/src/*.js"
   },
   "scripts": {
     "build": "medusa plugin:build",
