@@ -128,6 +128,17 @@ class PaytrailProviderService extends AbstractPaymentProvider<PaytrailOptions> {
         )
       }
 
+      const email =
+        context?.customer?.email ??
+        (typeof input.data?.email === "string" ? input.data.email : undefined);
+
+      if (!email) {
+        throw new MedusaError(
+          MedusaError.Types.INVALID_DATA,
+          "Paytrail: a customer email is required to initiate payment"
+        );
+      }
+
       const stamp = context?.idempotency_key + randomUUID()
 
       const createPaymentRequest = plainToInstance(PaytrailCreatePaymentRequest, {
@@ -137,7 +148,7 @@ class PaytrailProviderService extends AbstractPaymentProvider<PaytrailOptions> {
         currency: currency_code.toUpperCase(),
         language: this.config.language,
         customer: {
-          email: context?.customer?.email
+          email: email
         },
         redirectUrls: this.getRedirectUrls(),
       })
