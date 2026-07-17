@@ -15,7 +15,7 @@ const validParams = {
     "b2d3ecdda2c04563a4638fcade3d4e77dfdc58829b429ad2c2cb422d0fc64080",
 }
 
-const parse = (overrides: Record<string, unknown> = {}) =>
+const parse = (overrides = {}) =>
   PaytrailCallbackQuery.safeParse({ ...validParams, ...overrides })
 
 describe("PaytrailCallbackQuery", () => {
@@ -87,7 +87,7 @@ describe("PaytrailCallbackQuery", () => {
     ).toBe(false)
   })
 
-  it.each(["ok", "fail", "pending", "delayed"] as const)(
+  it.each(["ok", "fail", "pending", "delayed"])(
     "accepts checkout-status=%s",
     (status) => {
       expect(parse({ "checkout-status": status }).success).toBe(true)

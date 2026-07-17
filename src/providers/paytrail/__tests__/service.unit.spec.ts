@@ -4,9 +4,9 @@ import PaytrailProviderService from "../service"
 import type { PaytrailOptions } from "../types"
 
 
-const createPaymentMock = jest.fn()
-const getPaymentStatusMock = jest.fn()
-const createRefundMock = jest.fn()
+const mockCreatePayment = jest.fn()
+const mockGetPaymentStatus = jest.fn()
+const mockCreateRefund = jest.fn()
 
 jest.mock("crypto", () => ({
     ...jest.requireActual("crypto"),
@@ -16,9 +16,9 @@ jest.mock("crypto", () => ({
 jest.mock("@paytrail/paytrail-js-sdk", () => {
     return {
         PaytrailClient: jest.fn().mockImplementation(() => ({
-            createPayment: createPaymentMock,
-            getPaymentStatus: getPaymentStatusMock,
-            createRefund: createRefundMock,
+            createPayment: mockCreatePayment,
+            getPaymentStatus: mockGetPaymentStatus,
+            createRefund: mockCreateRefund,
         })),
         CreatePaymentRequest: class CreatePaymentRequest { },
         CreateRefundRequest: class CreateRefundRequest { },
@@ -68,7 +68,7 @@ describe("PaytrailProviderService", () => {
             status: "error",
             data: {},
         })
-        expect(getPaymentStatusMock).not.toHaveBeenCalled()
+        expect(mockGetPaymentStatus).not.toHaveBeenCalled()
     })
 
     it("returns error from getPaymentStatus when transactionId is missing", async () => {
@@ -82,12 +82,12 @@ describe("PaytrailProviderService", () => {
             status: "error",
             data: {},
         })
-        expect(getPaymentStatusMock).not.toHaveBeenCalled()
+        expect(mockGetPaymentStatus).not.toHaveBeenCalled()
     })
 
     it("creates refund with callback urls from config", async () => {
         const service = buildService()
-        createRefundMock.mockResolvedValue({
+        mockCreateRefund.mockResolvedValue({
             status: 200,
             data: {
                 transactionId: "refund-123",
@@ -102,7 +102,7 @@ describe("PaytrailProviderService", () => {
             data: { transactionId: "trx-123" },
         } as any)
 
-        expect(createRefundMock).toHaveBeenCalledWith(
+        expect(mockCreateRefund).toHaveBeenCalledWith(
             { transactionId: "trx-123" },
             expect.objectContaining({
                 amount: 1250,
@@ -146,12 +146,12 @@ describe("PaytrailProviderService", () => {
             } as any)
         ).rejects.toThrow("Failed to initiate Paytrail payment")
 
-        expect(createPaymentMock).not.toHaveBeenCalled()
+        expect(mockCreatePayment).not.toHaveBeenCalled()
     })
 
     it("wraps initiatePayment errors with unexpected-state MedusaError", async () => {
         const service = buildService()
-        createPaymentMock.mockRejectedValue(new Error("network failure"))
+        mockCreatePayment.mockRejectedValue(new Error("network failure"))
 
         await expect(
             service.initiatePayment({
