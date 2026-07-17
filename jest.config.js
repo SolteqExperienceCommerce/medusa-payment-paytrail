@@ -16,7 +16,6 @@ module.exports = {
   moduleFileExtensions: ["js", "ts", "json"],
   testPathIgnorePatterns: ["<rootDir>/node_modules/", "<rootDir>/.medusa/", "<rootDir>/dist/"],
   modulePathIgnorePatterns: ["dist/", "<rootDir>/.medusa/"],
-  setupFiles: ["./integration-tests/setup.js"],
 };
 
 if (process.env.TEST_TYPE === "unit") {
