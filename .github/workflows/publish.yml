@@ -24,11 +24,11 @@ jobs:
         env:
           YARN_VERSION: "1.22"
 
-      - name: Build
-        run: yarn build
-
       - name: Run unit tests
         run: yarn test:unit
+
+      - name: Build
+        run: yarn build
 
       - name: Publish
         run: npm publish --access public
