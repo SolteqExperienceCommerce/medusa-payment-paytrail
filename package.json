@@ -11,6 +11,13 @@
   ],
   "author": "Solteq",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SolteqExperienceCommerce/medusa-payment-paytrail.git"
+  },
+  "bugs": {
+    "url": "https://github.com/SolteqExperienceCommerce/medusa-payment-paytrail/issues"
+  },  
   "files": [
     ".medusa/server"
   ],
