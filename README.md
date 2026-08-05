@@ -30,8 +30,8 @@ modules: [
           resolve: "@solteq-excom/medusa-payment-paytrail/providers/paytrail",
           id: "paytrail",
           options: {
-            merchantId: Number(process.env.PAYTRAIL_MERCHANT_ID ?? "375917"),
-            secretKey: process.env.PAYTRAIL_SECRET_KEY ?? "SAIPPUAKAUPPIAS",
+            merchantId: Number(process.env.PAYTRAIL_MERCHANT_ID),
+            secretKey: process.env.PAYTRAIL_SECRET_KEY,
             platformName: process.env.PAYTRAIL_PLATFORM_NAME ?? "MedusaJS",
             callbackBaseUrl: process.env.PAYTRAIL_CALLBACK_BASE_URL,
             language: process.env.PAYTRAIL_LANGUAGE ?? "EN",
@@ -64,6 +64,7 @@ PAYTRAIL_LANGUAGE=EN
 ```
 
 Paytrail requires HTTPS callback URLs for both success and cancel callbacks.
+Example uses [Paytrail test credentials](https://docs.paytrail.com/#/?id=test-credentials)
 
 ## Features
 
@@ -110,10 +111,28 @@ The route forwards callback payloads into Medusa's payment webhook pipeline by e
 - Verify `PAYTRAIL_CALLBACK_BASE_URL` is configured with an HTTPS URL.
 - Paytrail requires HTTPS callback URLs for both success and cancel callbacks.
 
+## Contributing
+
+Bug reports and feature requests are welcome.
+
+When submitting an issue, include:
+
+- A clear description of the problem or requested change
+- Steps to reproduce, if applicable
+- Relevant configuration details, logs, or screenshots
+
+When submitting a pull request:
+
+- Open an issue first for larger changes so the approach can be discussed
+- Keep the PR focused on a single fix or feature
+- Include tests or updates to existing tests when behavior changes
+- Update the README or other documentation if the public behavior changes
+
+
 ## Disclaimer
 
 This package is provided as-is, without warranty of any kind. You are responsible for validating the integration, security, and compliance requirements before using it in production.
 
 ## References
 
-- Official Paytrail API documentation: https://docs.paytrail.com/#/
+- [Official Paytrail API documentation](https://docs.paytrail.com/#/)
