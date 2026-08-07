@@ -144,7 +144,7 @@ describe("PaytrailProviderService", () => {
                 context: { idempotency_key: "idem-non-eur-" },
                 data: { session_id: "session-non-eur" },
             } as any)
-        ).rejects.toThrow("Failed to initiate Paytrail payment")
+        ).rejects.toThrow("Paytrail only supports EUR currency")
 
         expect(mockCreatePayment).not.toHaveBeenCalled()
     })
@@ -157,7 +157,7 @@ describe("PaytrailProviderService", () => {
             service.initiatePayment({
                 amount: 10,
                 currency_code: "eur",
-                context: { idempotency_key: "idem-2-" },
+                context: { idempotency_key: "idem-2-", customer: { email: "test@example.com" } },
                 data: { session_id: "session-2" },
             } as any)
         ).rejects.toThrow(MedusaError)
@@ -166,9 +166,33 @@ describe("PaytrailProviderService", () => {
             service.initiatePayment({
                 amount: 10,
                 currency_code: "eur",
-                context: { idempotency_key: "idem-2-" },
+                context: { idempotency_key: "idem-2-", customer: { email: "test@example.com" } },
                 data: { session_id: "session-2" },
             } as any)
         ).rejects.toThrow("Failed to initiate Paytrail payment")
+    })
+
+    it("throws explicit validation error when email is missing", async () => {
+        const service = buildService()
+
+        await expect(
+            service.initiatePayment({
+                amount: 10,
+                currency_code: "eur",
+                context: { idempotency_key: "idem-no-email-" },
+                data: { session_id: "session-no-email" },
+            } as any)
+        ).rejects.toThrow(MedusaError)
+
+        await expect(
+            service.initiatePayment({
+                amount: 10,
+                currency_code: "eur",
+                context: { idempotency_key: "idem-no-email-" },
+                data: { session_id: "session-no-email" },
+            } as any)
+        ).rejects.toThrow("Paytrail: a customer email is required to initiate payment")
+
+        expect(mockCreatePayment).not.toHaveBeenCalled()
     })
 })

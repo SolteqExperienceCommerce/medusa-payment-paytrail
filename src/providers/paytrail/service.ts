@@ -118,29 +118,29 @@ class PaytrailProviderService extends AbstractPaymentProvider<PaytrailOptions> {
   async initiatePayment(
     input: InitiatePaymentInput
   ): Promise<InitiatePaymentOutput> {
+    const { amount, currency_code, context } = input
+
+    if (currency_code !== "eur") {
+      throw new MedusaError(
+        MedusaError.Types.INVALID_DATA,
+        "Paytrail only supports EUR currency"
+      )
+    }
+
+    const email =
+      context?.customer?.email ??
+      (typeof input.data?.email === "string" ? input.data.email : undefined)
+
+    if (!email) {
+      throw new MedusaError(
+        MedusaError.Types.INVALID_DATA,
+        "Paytrail: a customer email is required to initiate payment"
+      )
+    }
+
+    const stamp = context?.idempotency_key + randomUUID()
+
     try {
-      const { amount, currency_code, context } = input
-
-      if (currency_code !== "eur") {
-        throw new MedusaError(
-          MedusaError.Types.INVALID_DATA,
-          "Paytrail only supports EUR currency"
-        )
-      }
-
-      const email =
-        context?.customer?.email ??
-        (typeof input.data?.email === "string" ? input.data.email : undefined);
-
-      if (!email) {
-        throw new MedusaError(
-          MedusaError.Types.INVALID_DATA,
-          "Paytrail: a customer email is required to initiate payment"
-        );
-      }
-
-      const stamp = context?.idempotency_key + randomUUID()
-
       const createPaymentRequest = plainToInstance(PaytrailCreatePaymentRequest, {
         stamp,
         reference: input.data?.session_id as string | undefined,
@@ -148,7 +148,7 @@ class PaytrailProviderService extends AbstractPaymentProvider<PaytrailOptions> {
         currency: currency_code.toUpperCase(),
         language: this.config.language,
         customer: {
-          email: email
+          email,
         },
         redirectUrls: this.getRedirectUrls(),
       })
@@ -183,6 +183,14 @@ class PaytrailProviderService extends AbstractPaymentProvider<PaytrailOptions> {
         },
       }
     } catch (error: any) {
+      if (error instanceof MedusaError) {
+        throw error
+      }
+
+      this.logger.error("Failed to initiate Paytrail payment", {
+        error: error?.message,
+      })
+
       throw new MedusaError(
         MedusaError.Types.UNEXPECTED_STATE,
         `Failed to initiate Paytrail payment`
