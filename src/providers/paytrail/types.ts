@@ -3,5 +3,6 @@ export interface PaytrailOptions {
   secretKey: string
   platformName?: string
   callbackBaseUrl?: string
+  redirectUrlHostWhitelist: string[]
   language: "FI" | "SV" | "EN"
 }

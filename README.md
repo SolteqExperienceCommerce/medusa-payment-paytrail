@@ -34,6 +34,10 @@ modules: [
             secretKey: process.env.PAYTRAIL_SECRET_KEY,
             platformName: process.env.PAYTRAIL_PLATFORM_NAME ?? "MedusaJS",
             callbackBaseUrl: process.env.PAYTRAIL_CALLBACK_BASE_URL,
+            redirectUrlHostWhitelist: (process.env.PAYTRAIL_REDIRECT_URL_HOST_WHITELIST ?? "")
+              .split(",")
+              .map((value) => value.trim())
+              .filter(Boolean),
             language: process.env.PAYTRAIL_LANGUAGE ?? "EN",
           },
         },
@@ -51,6 +55,7 @@ Required and supported environment variables:
 - `PAYTRAIL_SECRET_KEY`
 - `PAYTRAIL_PLATFORM_NAME` (optional)
 - `PAYTRAIL_CALLBACK_BASE_URL` (recommended, must use HTTPS)
+- `PAYTRAIL_REDIRECT_URL_HOST_WHITELIST` (required, comma-separated `host[:port]` values)
 - `PAYTRAIL_LANGUAGE` (`FI`, `SV`, or `EN`)
 
 Example:
@@ -60,11 +65,16 @@ PAYTRAIL_MERCHANT_ID=375917
 PAYTRAIL_SECRET_KEY=SAIPPUAKAUPPIAS
 PAYTRAIL_PLATFORM_NAME=MedusaJS
 PAYTRAIL_CALLBACK_BASE_URL=https://your-backend.example.com
+PAYTRAIL_REDIRECT_URL_HOST_WHITELIST=localhost:8888,store.example.com
 PAYTRAIL_LANGUAGE=EN
 ```
 
 Paytrail requires HTTPS callback URLs for both success and cancel callbacks.
 Example uses [Paytrail test credentials](https://docs.paytrail.com/#/?id=test-credentials)
+
+When creating payment sessions, `input.data.redirectUrls.success` and `input.data.redirectUrls.cancel`
+must use `http` or `https`, include only host/path (no query/hash/auth), and the host must match
+`PAYTRAIL_REDIRECT_URL_HOST_WHITELIST`.
 
 ## Features
 

@@ -33,6 +33,7 @@ describe("PaytrailProviderService", () => {
         secretKey: "SAIPPUAKAUPPIAS",
         platformName: "medusa-tests",
         callbackBaseUrl: "https://store.example.com",
+        redirectUrlHostWhitelist: ["storefront.example", "localhost:8888"],
         language: "FI",
     }
 
@@ -55,6 +56,13 @@ describe("PaytrailProviderService", () => {
                 merchantId: 123,
             })
         ).toThrow("Paytrail secretKey is required")
+
+        expect(() =>
+            PaytrailProviderService.validateOptions({
+                merchantId: 123,
+                secretKey: "abc",
+            })
+        ).toThrow("Paytrail redirectUrlHostWhitelist is required")
     })
 
     it("returns error when authorizePayment has no transactionId", async () => {
@@ -158,7 +166,13 @@ describe("PaytrailProviderService", () => {
                 amount: 10,
                 currency_code: "eur",
                 context: { idempotency_key: "idem-2-", customer: { email: "test@example.com" } },
-                data: { session_id: "session-2" },
+                data: {
+                    session_id: "session-2",
+                    redirectUrls: {
+                        success: "https://storefront.example/success",
+                        cancel: "https://storefront.example/cancel",
+                    },
+                },
             } as any)
         ).rejects.toThrow(MedusaError)
 
@@ -167,7 +181,13 @@ describe("PaytrailProviderService", () => {
                 amount: 10,
                 currency_code: "eur",
                 context: { idempotency_key: "idem-2-", customer: { email: "test@example.com" } },
-                data: { session_id: "session-2" },
+                data: {
+                    session_id: "session-2",
+                    redirectUrls: {
+                        success: "https://storefront.example/success",
+                        cancel: "https://storefront.example/cancel",
+                    },
+                },
             } as any)
         ).rejects.toThrow("Failed to initiate Paytrail payment")
     })
@@ -192,6 +212,101 @@ describe("PaytrailProviderService", () => {
                 data: { session_id: "session-no-email" },
             } as any)
         ).rejects.toThrow("Paytrail: a customer email is required to initiate payment")
+
+        expect(mockCreatePayment).not.toHaveBeenCalled()
+    })
+
+    it("throws when redirect URL host is not whitelisted", async () => {
+        const service = buildService()
+
+        await expect(
+            service.initiatePayment({
+                amount: 10,
+                currency_code: "eur",
+                context: { idempotency_key: "idem-invalid-host-", customer: { email: "customer@example.com" } },
+                data: {
+                    session_id: "session-invalid-host",
+                    redirectUrls: {
+                        success: "https://evil.example/success",
+                        cancel: "https://storefront.example/cancel",
+                    },
+                },
+            } as any)
+        ).rejects.toThrow("Paytrail: input.data.redirectUrls.success host 'evil.example' is not whitelisted")
+
+        expect(mockCreatePayment).not.toHaveBeenCalled()
+    })
+
+    it("throws when redirect URL includes query parameters", async () => {
+        const service = buildService()
+
+        await expect(
+            service.initiatePayment({
+                amount: 10,
+                currency_code: "eur",
+                context: { idempotency_key: "idem-query-url-", customer: { email: "customer@example.com" } },
+                data: {
+                    session_id: "session-query-url",
+                    redirectUrls: {
+                        success: "http://localhost:8888/api/capture-payment/cart_01KZEA5C9HSKGMS739ZB9V878C?x=1",
+                        cancel: "http://localhost:8888/api/cancel-payment/cart_01KZEA5C9HSKGMS739ZB9V878C",
+                    },
+                },
+            } as any)
+        ).rejects.toThrow("Paytrail: input.data.redirectUrls.success must only include host and path")
+
+        expect(mockCreatePayment).not.toHaveBeenCalled()
+    })
+
+    it("uses redirectUrls from input.data when provided", async () => {
+        const configWithoutBaseUrl: PaytrailOptions = {
+            ...baseConfig,
+            callbackBaseUrl: undefined,
+        }
+        const service = buildService(configWithoutBaseUrl)
+
+        mockCreatePayment.mockResolvedValue({
+            status: 200,
+            data: {
+                transactionId: "trx-redirect-input",
+                href: "https://paytrail.example/redirect",
+            },
+        })
+
+        await service.initiatePayment({
+            amount: 10,
+            currency_code: "eur",
+            context: { idempotency_key: "idem-input-redirect-", customer: { email: "customer@example.com" } },
+            data: {
+                session_id: "session-input-redirect",
+                redirectUrls: {
+                    success: "https://storefront.example/success",
+                    cancel: "https://storefront.example/cancel",
+                },
+            },
+        } as any)
+
+        expect(mockCreatePayment).toHaveBeenCalledWith(
+            expect.objectContaining({
+                redirectUrls: {
+                    success: "https://storefront.example/success",
+                    cancel: "https://storefront.example/cancel",
+                },
+            })
+        )
+    })
+
+    it("throws when redirect URLs are missing from input", async () => {
+        const service = buildService()
+
+        await expect(
+            service.initiatePayment({
+                amount: 10,
+                currency_code: "eur",
+                context: { idempotency_key: "idem-no-redirect-", customer: { email: "customer@example.com" } },
+                data: { session_id: "session-no-redirect" },
+            } as any)
+        ).rejects.toThrow("Paytrail: input.data.redirectUrls.success and input.data.redirectUrls.cancel are required")
 
         expect(mockCreatePayment).not.toHaveBeenCalled()
     })
