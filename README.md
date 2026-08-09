@@ -34,6 +34,9 @@ modules: [
             secretKey: process.env.PAYTRAIL_SECRET_KEY,
             platformName: process.env.PAYTRAIL_PLATFORM_NAME ?? "MedusaJS",
             callbackBaseUrl: process.env.PAYTRAIL_CALLBACK_BASE_URL,
+            callbackDelay: process.env.PAYTRAIL_CALLBACK_DELAY
+              ? Number(process.env.PAYTRAIL_CALLBACK_DELAY)
+              : undefined,
             redirectUrlHostWhitelist: (process.env.PAYTRAIL_REDIRECT_URL_HOST_WHITELIST ?? "")
               .split(",")
               .map((value) => value.trim())
@@ -55,6 +58,7 @@ Required and supported environment variables:
 - `PAYTRAIL_SECRET_KEY`
 - `PAYTRAIL_PLATFORM_NAME` (optional)
 - `PAYTRAIL_CALLBACK_BASE_URL` (recommended, must use HTTPS)
+- `PAYTRAIL_CALLBACK_DELAY` (optional, seconds, 0-900, default `0`)
 - `PAYTRAIL_REDIRECT_URL_HOST_WHITELIST` (required, comma-separated `host[:port]` values)
 - `PAYTRAIL_LANGUAGE` (`FI`, `SV`, or `EN`)
 
@@ -65,9 +69,17 @@ PAYTRAIL_MERCHANT_ID=375917
 PAYTRAIL_SECRET_KEY=SAIPPUAKAUPPIAS
 PAYTRAIL_PLATFORM_NAME=MedusaJS
 PAYTRAIL_CALLBACK_BASE_URL=https://your-backend.example.com
+PAYTRAIL_CALLBACK_DELAY=0
 PAYTRAIL_REDIRECT_URL_HOST_WHITELIST=localhost:8888,store.example.com
 PAYTRAIL_LANGUAGE=EN
 ```
+
+If `PAYTRAIL_CALLBACK_BASE_URL` is set, the provider sends Paytrail `callbackUrls` automatically as:
+
+- success: `{PAYTRAIL_CALLBACK_BASE_URL}/hooks/paytrail`
+- cancel: `{PAYTRAIL_CALLBACK_BASE_URL}/hooks/paytrail`
+
+`PAYTRAIL_CALLBACK_DELAY` maps to Paytrail `callbackDelay` (seconds). According to Paytrail, when callback URLs are provided, callback delay can be `0` to `900` seconds and defaults to `0`.
 
 Paytrail requires HTTPS callback URLs for both success and cancel callbacks.
 Example uses [Paytrail test credentials](https://docs.paytrail.com/#/?id=test-credentials)

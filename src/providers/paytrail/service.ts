@@ -116,6 +116,26 @@ class PaytrailProviderService extends AbstractPaymentProvider<PaytrailOptions> {
     }
   }
 
+  private getCallbackDelay() {
+    if (this.config.callbackDelay === undefined) {
+      return undefined
+    }
+
+    if (
+      typeof this.config.callbackDelay !== "number" ||
+      !Number.isFinite(this.config.callbackDelay) ||
+      this.config.callbackDelay < 0 ||
+      this.config.callbackDelay > 900
+    ) {
+      throw new MedusaError(
+        MedusaError.Types.INVALID_DATA,
+        "Paytrail callbackDelay must be a number between 0 and 900 seconds"
+      )
+    }
+
+    return this.config.callbackDelay
+  }
+
   private getRedirectUrls(data?: unknown) {
     const inputData = (data ?? {}) as {
       redirectUrls?: { success?: unknown; cancel?: unknown }
@@ -223,6 +243,9 @@ class PaytrailProviderService extends AbstractPaymentProvider<PaytrailOptions> {
       )
     }
 
+    const callbackUrls = this.getCallbackUrls()
+    const callbackDelay = this.getCallbackDelay()
+
     const stamp = context?.idempotency_key + randomUUID()
 
     try {
@@ -236,6 +259,8 @@ class PaytrailProviderService extends AbstractPaymentProvider<PaytrailOptions> {
           email,
         },
         redirectUrls,
+        ...(callbackUrls ? { callbackUrls } : {}),
+        ...(callbackDelay !== undefined ? { callbackDelay } : {}),
       })
 
       const response = await this.client.createPayment(createPaymentRequest)

@@ -33,6 +33,7 @@ describe("PaytrailProviderService", () => {
         secretKey: "SAIPPUAKAUPPIAS",
         platformName: "medusa-tests",
         callbackBaseUrl: "https://store.example.com",
+        callbackDelay: 5,
         redirectUrlHostWhitelist: ["storefront.example", "localhost:8888"],
         language: "FI",
     }
@@ -294,6 +295,105 @@ describe("PaytrailProviderService", () => {
                 },
             })
         )
+    })
+
+    it("includes callbackUrls and callbackDelay from config", async () => {
+        const service = buildService()
+
+        mockCreatePayment.mockResolvedValue({
+            status: 200,
+            data: {
+                transactionId: "trx-callback-input",
+                href: "https://paytrail.example/redirect",
+            },
+        })
+
+        await service.initiatePayment({
+            amount: 10,
+            currency_code: "eur",
+            context: { idempotency_key: "idem-input-callback-", customer: { email: "customer@example.com" } },
+            data: {
+                session_id: "session-input-callback",
+                redirectUrls: {
+                    success: "https://storefront.example/success",
+                    cancel: "https://storefront.example/cancel",
+                },
+            },
+        } as any)
+
+        expect(mockCreatePayment).toHaveBeenCalledWith(
+            expect.objectContaining({
+                callbackUrls: {
+                    success: "https://store.example.com/hooks/paytrail",
+                    cancel: "https://store.example.com/hooks/paytrail",
+                },
+                callbackDelay: 5,
+            })
+        )
+    })
+
+    it("omits callbackUrls and callbackDelay when not configured", async () => {
+        const service = buildService({
+            ...baseConfig,
+            callbackBaseUrl: undefined,
+            callbackDelay: undefined,
+        })
+
+        mockCreatePayment.mockResolvedValue({
+            status: 200,
+            data: {
+                transactionId: "trx-no-callback-config",
+                href: "https://paytrail.example/redirect",
+            },
+        })
+
+        await service.initiatePayment({
+            amount: 10,
+            currency_code: "eur",
+            context: { idempotency_key: "idem-no-callback-config-", customer: { email: "customer@example.com" } },
+            data: {
+                session_id: "session-no-callback-config",
+                redirectUrls: {
+                    success: "https://storefront.example/success",
+                    cancel: "https://storefront.example/cancel",
+                },
+            },
+        } as any)
+
+        expect(mockCreatePayment).toHaveBeenCalledWith(
+            expect.not.objectContaining({
+                callbackUrls: expect.anything(),
+            })
+        )
+        expect(mockCreatePayment).toHaveBeenCalledWith(
+            expect.not.objectContaining({
+                callbackDelay: expect.anything(),
+            })
+        )
+    })
+
+    it("throws when callbackDelay config is invalid", async () => {
+        const service = buildService({
+            ...baseConfig,
+            callbackDelay: -1,
+        })
+
+        await expect(
+            service.initiatePayment({
+                amount: 10,
+                currency_code: "eur",
+                context: { idempotency_key: "idem-invalid-callback-delay-", customer: { email: "customer@example.com" } },
+                data: {
+                    session_id: "session-invalid-callback-delay",
+                    redirectUrls: {
+                        success: "https://storefront.example/success",
+                        cancel: "https://storefront.example/cancel",
+                    },
+                },
+            } as any)
+        ).rejects.toThrow("Paytrail callbackDelay must be a number between 0 and 900 seconds")
+
+        expect(mockCreatePayment).not.toHaveBeenCalled()
     })
 
     it("throws when redirect URLs are missing from input", async () => {
