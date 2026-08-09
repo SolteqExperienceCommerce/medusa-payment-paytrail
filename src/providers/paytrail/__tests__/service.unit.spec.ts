@@ -238,6 +238,27 @@ describe("PaytrailProviderService", () => {
         expect(mockCreatePayment).not.toHaveBeenCalled()
     })
 
+    it("throws when cancel redirect URL host is not whitelisted", async () => {
+        const service = buildService()
+
+        await expect(
+            service.initiatePayment({
+                amount: 10,
+                currency_code: "eur",
+                context: { idempotency_key: "idem-invalid-cancel-host-", customer: { email: "customer@example.com" } },
+                data: {
+                    session_id: "session-invalid-cancel-host",
+                    redirectUrls: {
+                        success: "https://storefront.example/success",
+                        cancel: "https://evil.example/cancel",
+                    },
+                },
+            } as any)
+        ).rejects.toThrow("Paytrail: input.data.redirectUrls.cancel host 'evil.example' is not whitelisted")
+
+        expect(mockCreatePayment).not.toHaveBeenCalled()
+    })
+
     it("throws when redirect URL includes query parameters", async () => {
         const service = buildService()
 
