@@ -59,7 +59,7 @@ Required and supported environment variables:
 - `PAYTRAIL_PLATFORM_NAME` (optional)
 - `PAYTRAIL_CALLBACK_BASE_URL` (recommended, must use HTTPS)
 - `PAYTRAIL_CALLBACK_DELAY` (optional, seconds, 0-900, default `0`)
-- `PAYTRAIL_REDIRECT_URL_HOST_WHITELIST` (required, comma-separated `host[:port]` values)
+- `PAYTRAIL_REDIRECT_URL_HOST_WHITELIST` (required, comma-separated `host[:port]` values; `*` wildcard supported)
 - `PAYTRAIL_LANGUAGE` (`FI`, `SV`, or `EN`)
 
 Example:
@@ -70,7 +70,7 @@ PAYTRAIL_SECRET_KEY=SAIPPUAKAUPPIAS
 PAYTRAIL_PLATFORM_NAME=MedusaJS
 PAYTRAIL_CALLBACK_BASE_URL=https://your-backend.example.com
 PAYTRAIL_CALLBACK_DELAY=0
-PAYTRAIL_REDIRECT_URL_HOST_WHITELIST=localhost:8888,store.example.com
+PAYTRAIL_REDIRECT_URL_HOST_WHITELIST=localhost:8888,store.example.com,*.foo.bar.baz,pr-*.foo.bar.baz
 PAYTRAIL_LANGUAGE=EN
 ```
 
@@ -87,6 +87,11 @@ Example uses [Paytrail test credentials](https://docs.paytrail.com/#/?id=test-cr
 When creating payment sessions, `input.data.redirect_success` and `input.data.redirect_cancel`
 must use `http` or `https`, include only host/path (no query/hash/auth), and the host must match
 `PAYTRAIL_REDIRECT_URL_HOST_WHITELIST`.
+
+`PAYTRAIL_REDIRECT_URL_HOST_WHITELIST` supports wildcard host patterns with `*`, for example:
+
+- `*.foo.bar.baz`
+- `pr-*.foo.bar.baz`
 
 ## Features
 

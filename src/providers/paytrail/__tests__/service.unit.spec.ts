@@ -251,6 +251,84 @@ describe("PaytrailProviderService", () => {
         expect(mockCreatePayment).not.toHaveBeenCalled()
     })
 
+    it("accepts wildcard subdomain pattern in redirectUrlHostWhitelist", async () => {
+        const service = buildService({
+            ...baseConfig,
+            redirectUrlHostWhitelist: ["*.foo.bar.baz"],
+        })
+
+        mockCreatePayment.mockResolvedValue({
+            status: 200,
+            data: {
+                transactionId: "trx-wildcard-subdomain",
+                href: "https://paytrail.example/redirect",
+            },
+        })
+
+        await service.initiatePayment({
+            amount: 10,
+            currency_code: "eur",
+            context: { idempotency_key: "idem-wildcard-subdomain-", customer: { email: "customer@example.com" } },
+            data: {
+                session_id: "session-wildcard-subdomain",
+                redirect_success: "https://pr-12423.foo.bar.baz/success",
+                redirect_cancel: "https://pr-56789.foo.bar.baz/cancel",
+            },
+        } as any)
+
+        expect(mockCreatePayment).toHaveBeenCalled()
+    })
+
+    it("accepts prefix wildcard pattern in redirectUrlHostWhitelist", async () => {
+        const service = buildService({
+            ...baseConfig,
+            redirectUrlHostWhitelist: ["pr-*.foo.bar.baz"],
+        })
+
+        mockCreatePayment.mockResolvedValue({
+            status: 200,
+            data: {
+                transactionId: "trx-wildcard-prefix",
+                href: "https://paytrail.example/redirect",
+            },
+        })
+
+        await service.initiatePayment({
+            amount: 10,
+            currency_code: "eur",
+            context: { idempotency_key: "idem-wildcard-prefix-", customer: { email: "customer@example.com" } },
+            data: {
+                session_id: "session-wildcard-prefix",
+                redirect_success: "https://pr-12423.foo.bar.baz/success",
+                redirect_cancel: "https://pr-12423.foo.bar.baz/cancel",
+            },
+        } as any)
+
+        expect(mockCreatePayment).toHaveBeenCalled()
+    })
+
+    it("rejects hosts that do not match wildcard whitelist pattern", async () => {
+        const service = buildService({
+            ...baseConfig,
+            redirectUrlHostWhitelist: ["pr-*.foo.bar.baz"],
+        })
+
+        await expect(
+            service.initiatePayment({
+                amount: 10,
+                currency_code: "eur",
+                context: { idempotency_key: "idem-wildcard-reject-", customer: { email: "customer@example.com" } },
+                data: {
+                    session_id: "session-wildcard-reject",
+                    redirect_success: "https://preview-12423.foo.bar.baz/success",
+                    redirect_cancel: "https://pr-12423.foo.bar.baz/cancel",
+                },
+            } as any)
+        ).rejects.toThrow("Paytrail: input.data.redirect_success host 'preview-12423.foo.bar.baz' is not whitelisted")
+
+        expect(mockCreatePayment).not.toHaveBeenCalled()
+    })
+
     it("throws when redirect URL includes query parameters", async () => {
         const service = buildService()
 

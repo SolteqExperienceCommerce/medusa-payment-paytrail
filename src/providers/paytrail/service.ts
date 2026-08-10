@@ -155,14 +155,14 @@ class PaytrailProviderService extends AbstractPaymentProvider<PaytrailOptions> {
       return undefined
     }
 
-    const whitelist = new Set(
+    const whitelist =
       (this.config.redirectUrlHostWhitelist ?? [])
         .filter((value) => typeof value === "string")
         .map((value) => value.trim().toLowerCase())
         .filter(Boolean)
-    )
+    
 
-    if (!whitelist.size) {
+    if (!whitelist.length) {
       throw new MedusaError(
         MedusaError.Types.INVALID_DATA,
         "Paytrail redirectUrlHostWhitelist is not configured"
@@ -199,7 +199,17 @@ class PaytrailProviderService extends AbstractPaymentProvider<PaytrailOptions> {
       }
 
       const host = parsed.host.toLowerCase()
-      if (!whitelist.has(host)) {
+      const isAllowed = whitelist.some((pattern) => {
+        if (!pattern.includes("*")) {
+          return pattern === host
+        }
+
+        const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&")
+        const regex = new RegExp(`^${escaped.replace(/\*/g, ".*")}$`)
+        return regex.test(host)
+      })
+
+      if (!isAllowed) {
         throw new MedusaError(
           MedusaError.Types.INVALID_DATA,
           `Paytrail: input.data.${field} host '${host}' is not whitelisted`
