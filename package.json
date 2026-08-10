@@ -1,6 +1,6 @@
 {
   "name": "@solteq-excom/medusa-payment-paytrail",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Paytrail payment provider plugin for Medusa",
   "keywords": [
     "medusa-plugin-payment",
