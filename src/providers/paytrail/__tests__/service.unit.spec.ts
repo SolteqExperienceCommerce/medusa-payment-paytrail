@@ -169,10 +169,8 @@ describe("PaytrailProviderService", () => {
                 context: { idempotency_key: "idem-2-", customer: { email: "test@example.com" } },
                 data: {
                     session_id: "session-2",
-                    redirectUrls: {
-                        success: "https://storefront.example/success",
-                        cancel: "https://storefront.example/cancel",
-                    },
+                    redirect_success: "https://storefront.example/success",
+                    redirect_cancel: "https://storefront.example/cancel",
                 },
             } as any)
         ).rejects.toThrow(MedusaError)
@@ -184,10 +182,8 @@ describe("PaytrailProviderService", () => {
                 context: { idempotency_key: "idem-2-", customer: { email: "test@example.com" } },
                 data: {
                     session_id: "session-2",
-                    redirectUrls: {
-                        success: "https://storefront.example/success",
-                        cancel: "https://storefront.example/cancel",
-                    },
+                    redirect_success: "https://storefront.example/success",
+                    redirect_cancel: "https://storefront.example/cancel",
                 },
             } as any)
         ).rejects.toThrow("Failed to initiate Paytrail payment")
@@ -227,13 +223,11 @@ describe("PaytrailProviderService", () => {
                 context: { idempotency_key: "idem-invalid-host-", customer: { email: "customer@example.com" } },
                 data: {
                     session_id: "session-invalid-host",
-                    redirectUrls: {
-                        success: "https://evil.example/success",
-                        cancel: "https://storefront.example/cancel",
-                    },
+                    redirect_success: "https://evil.example/success",
+                    redirect_cancel: "https://storefront.example/cancel",
                 },
             } as any)
-        ).rejects.toThrow("Paytrail: input.data.redirectUrls.success host 'evil.example' is not whitelisted")
+        ).rejects.toThrow("Paytrail: input.data.redirect_success host 'evil.example' is not whitelisted")
 
         expect(mockCreatePayment).not.toHaveBeenCalled()
     })
@@ -248,13 +242,11 @@ describe("PaytrailProviderService", () => {
                 context: { idempotency_key: "idem-invalid-cancel-host-", customer: { email: "customer@example.com" } },
                 data: {
                     session_id: "session-invalid-cancel-host",
-                    redirectUrls: {
-                        success: "https://storefront.example/success",
-                        cancel: "https://evil.example/cancel",
-                    },
+                    redirect_success: "https://storefront.example/success",
+                    redirect_cancel: "https://evil.example/cancel",
                 },
             } as any)
-        ).rejects.toThrow("Paytrail: input.data.redirectUrls.cancel host 'evil.example' is not whitelisted")
+        ).rejects.toThrow("Paytrail: input.data.redirect_cancel host 'evil.example' is not whitelisted")
 
         expect(mockCreatePayment).not.toHaveBeenCalled()
     })
@@ -269,18 +261,16 @@ describe("PaytrailProviderService", () => {
                 context: { idempotency_key: "idem-query-url-", customer: { email: "customer@example.com" } },
                 data: {
                     session_id: "session-query-url",
-                    redirectUrls: {
-                        success: "http://localhost:8888/api/capture-payment/cart_01KZEA5C9HSKGMS739ZB9V878C?x=1",
-                        cancel: "http://localhost:8888/api/cancel-payment/cart_01KZEA5C9HSKGMS739ZB9V878C",
-                    },
+                    redirect_success: "http://localhost:8888/api/capture-payment/cart_01KZEA5C9HSKGMS739ZB9V878C?x=1",
+                    redirect_cancel: "http://localhost:8888/api/cancel-payment/cart_01KZEA5C9HSKGMS739ZB9V878C",
                 },
             } as any)
-        ).rejects.toThrow("Paytrail: input.data.redirectUrls.success must only include host and path")
+        ).rejects.toThrow("Paytrail: input.data.redirect_success must only include host and path")
 
         expect(mockCreatePayment).not.toHaveBeenCalled()
     })
 
-    it("uses redirectUrls from input.data when provided", async () => {
+    it("uses redirect_success and redirect_cancel from input.data when provided", async () => {
         const configWithoutBaseUrl: PaytrailOptions = {
             ...baseConfig,
             callbackBaseUrl: undefined,
@@ -301,10 +291,8 @@ describe("PaytrailProviderService", () => {
             context: { idempotency_key: "idem-input-redirect-", customer: { email: "customer@example.com" } },
             data: {
                 session_id: "session-input-redirect",
-                redirectUrls: {
-                    success: "https://storefront.example/success",
-                    cancel: "https://storefront.example/cancel",
-                },
+                redirect_success: "https://storefront.example/success",
+                redirect_cancel: "https://storefront.example/cancel",
             },
         } as any)
 
@@ -335,10 +323,8 @@ describe("PaytrailProviderService", () => {
             context: { idempotency_key: "idem-input-callback-", customer: { email: "customer@example.com" } },
             data: {
                 session_id: "session-input-callback",
-                redirectUrls: {
-                    success: "https://storefront.example/success",
-                    cancel: "https://storefront.example/cancel",
-                },
+                redirect_success: "https://storefront.example/success",
+                redirect_cancel: "https://storefront.example/cancel",
             },
         } as any)
 
@@ -374,10 +360,8 @@ describe("PaytrailProviderService", () => {
             context: { idempotency_key: "idem-no-callback-config-", customer: { email: "customer@example.com" } },
             data: {
                 session_id: "session-no-callback-config",
-                redirectUrls: {
-                    success: "https://storefront.example/success",
-                    cancel: "https://storefront.example/cancel",
-                },
+                redirect_success: "https://storefront.example/success",
+                redirect_cancel: "https://storefront.example/cancel",
             },
         } as any)
 
@@ -406,10 +390,8 @@ describe("PaytrailProviderService", () => {
                 context: { idempotency_key: "idem-invalid-callback-delay-", customer: { email: "customer@example.com" } },
                 data: {
                     session_id: "session-invalid-callback-delay",
-                    redirectUrls: {
-                        success: "https://storefront.example/success",
-                        cancel: "https://storefront.example/cancel",
-                    },
+                    redirect_success: "https://storefront.example/success",
+                    redirect_cancel: "https://storefront.example/cancel",
                 },
             } as any)
         ).rejects.toThrow("Paytrail callbackDelay must be a number between 0 and 900 seconds")
@@ -427,7 +409,7 @@ describe("PaytrailProviderService", () => {
                 context: { idempotency_key: "idem-no-redirect-", customer: { email: "customer@example.com" } },
                 data: { session_id: "session-no-redirect" },
             } as any)
-        ).rejects.toThrow("Paytrail: input.data.redirectUrls.success and input.data.redirectUrls.cancel are required")
+        ).rejects.toThrow("Paytrail: input.data.redirect_success and input.data.redirect_cancel are required")
 
         expect(mockCreatePayment).not.toHaveBeenCalled()
     })

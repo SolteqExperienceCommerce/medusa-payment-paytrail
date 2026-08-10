@@ -84,7 +84,7 @@ If `PAYTRAIL_CALLBACK_BASE_URL` is set, the provider sends Paytrail `callbackUrl
 Paytrail requires HTTPS callback URLs for both success and cancel callbacks.
 Example uses [Paytrail test credentials](https://docs.paytrail.com/#/?id=test-credentials)
 
-When creating payment sessions, `input.data.redirectUrls.success` and `input.data.redirectUrls.cancel`
+When creating payment sessions, `input.data.redirect_success` and `input.data.redirect_cancel`
 must use `http` or `https`, include only host/path (no query/hash/auth), and the host must match
 `PAYTRAIL_REDIRECT_URL_HOST_WHITELIST`.
 

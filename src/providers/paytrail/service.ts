@@ -138,16 +138,17 @@ class PaytrailProviderService extends AbstractPaymentProvider<PaytrailOptions> {
 
   private getRedirectUrls(data?: unknown) {
     const inputData = (data ?? {}) as {
-      redirectUrls?: { success?: unknown; cancel?: unknown }
+      redirect_success?: unknown
+      redirect_cancel?: unknown
     }
 
     const successFromInput =
-      typeof inputData.redirectUrls?.success === "string"
-        ? inputData.redirectUrls.success
+      typeof inputData.redirect_success === "string"
+        ? inputData.redirect_success
         : undefined
     const cancelFromInput =
-      typeof inputData.redirectUrls?.cancel === "string"
-        ? inputData.redirectUrls.cancel
+      typeof inputData.redirect_cancel === "string"
+        ? inputData.redirect_cancel
         : undefined
 
     if (!successFromInput || !cancelFromInput) {
@@ -168,7 +169,10 @@ class PaytrailProviderService extends AbstractPaymentProvider<PaytrailOptions> {
       )
     }
 
-    const validate = (rawUrl: string, field: "success" | "cancel") => {
+    const validate = (
+      rawUrl: string,
+      field: "redirect_success" | "redirect_cancel"
+    ) => {
       let parsed: URL
 
       try {
@@ -176,21 +180,21 @@ class PaytrailProviderService extends AbstractPaymentProvider<PaytrailOptions> {
       } catch {
         throw new MedusaError(
           MedusaError.Types.INVALID_DATA,
-          `Paytrail: input.data.redirectUrls.${field} must be a valid absolute URL`
+          `Paytrail: input.data.${field} must be a valid absolute URL`
         )
       }
 
       if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
         throw new MedusaError(
           MedusaError.Types.INVALID_DATA,
-          `Paytrail: input.data.redirectUrls.${field} must use http or https`
+          `Paytrail: input.data.${field} must use http or https`
         )
       }
 
       if (parsed.username || parsed.password || parsed.search || parsed.hash) {
         throw new MedusaError(
           MedusaError.Types.INVALID_DATA,
-          `Paytrail: input.data.redirectUrls.${field} must only include host and path`
+          `Paytrail: input.data.${field} must only include host and path`
         )
       }
 
@@ -198,7 +202,7 @@ class PaytrailProviderService extends AbstractPaymentProvider<PaytrailOptions> {
       if (!whitelist.has(host)) {
         throw new MedusaError(
           MedusaError.Types.INVALID_DATA,
-          `Paytrail: input.data.redirectUrls.${field} host '${host}' is not whitelisted`
+          `Paytrail: input.data.${field} host '${host}' is not whitelisted`
         )
       }
 
@@ -206,8 +210,8 @@ class PaytrailProviderService extends AbstractPaymentProvider<PaytrailOptions> {
     }
 
     return {
-      success: validate(successFromInput, "success"),
-      cancel: validate(cancelFromInput, "cancel"),
+      success: validate(successFromInput, "redirect_success"),
+      cancel: validate(cancelFromInput, "redirect_cancel"),
     }
   }
 
@@ -239,7 +243,7 @@ class PaytrailProviderService extends AbstractPaymentProvider<PaytrailOptions> {
     if (!redirectUrls) {
       throw new MedusaError(
         MedusaError.Types.INVALID_DATA,
-        "Paytrail: input.data.redirectUrls.success and input.data.redirectUrls.cancel are required"
+        "Paytrail: input.data.redirect_success and input.data.redirect_cancel are required"
       )
     }
 
