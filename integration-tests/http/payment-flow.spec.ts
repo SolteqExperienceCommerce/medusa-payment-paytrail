@@ -267,6 +267,12 @@ medusaIntegrationTestRunner({
             `/store/payment-collections/${paymentCollection.id}/payment-sessions`,
             {
               provider_id: "pp_paytrail_paytrail",
+              data: {
+                redirectUrls: {
+                  success: "http://localhost:8888",
+                  cancel: "http://localhost:8888",
+                }
+              },              
             },
             storeHeadersWithCustomer
           )
