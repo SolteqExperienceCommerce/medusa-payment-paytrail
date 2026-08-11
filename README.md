@@ -1,6 +1,6 @@
 # Paytrail Payment Provider Plugin
 
-Paytrail payment provider plugin for Medusa.
+Paytrail payment provider plugin for Medusa v2.
 
 This package is published to NPM as `@solteq-excom/medusa-payment-paytrail`.
 
