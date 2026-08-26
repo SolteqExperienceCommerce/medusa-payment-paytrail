@@ -191,13 +191,6 @@ class PaytrailProviderService extends AbstractPaymentProvider<PaytrailOptions> {
         )
       }
 
-      if (parsed.username || parsed.password || parsed.search || parsed.hash) {
-        throw new MedusaError(
-          MedusaError.Types.INVALID_DATA,
-          `Paytrail: input.data.${field} must only include host and path`
-        )
-      }
-
       const host = parsed.host.toLowerCase()
       const isAllowed = whitelist.some((pattern) => {
         if (!pattern.includes("*")) {

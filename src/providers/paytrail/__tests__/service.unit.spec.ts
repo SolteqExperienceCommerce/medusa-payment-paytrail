@@ -329,23 +329,36 @@ describe("PaytrailProviderService", () => {
         expect(mockCreatePayment).not.toHaveBeenCalled()
     })
 
-    it("throws when redirect URL includes query parameters", async () => {
+    it("accepts redirect URLs with query parameters and fragments", async () => {
         const service = buildService()
 
-        await expect(
-            service.initiatePayment({
-                amount: 10,
-                currency_code: "eur",
-                context: { idempotency_key: "idem-query-url-", customer: { email: "customer@example.com" } },
-                data: {
-                    session_id: "session-query-url",
-                    redirect_success: "http://localhost:8888/api/capture-payment/cart_01KZEA5C9HSKGMS739ZB9V878C?x=1",
-                    redirect_cancel: "http://localhost:8888/api/cancel-payment/cart_01KZEA5C9HSKGMS739ZB9V878C",
-                },
-            } as any)
-        ).rejects.toThrow("Paytrail: input.data.redirect_success must only include host and path")
+        mockCreatePayment.mockResolvedValue({
+            status: 200,
+            data: {
+                transactionId: "trx-url-components",
+                href: "https://paytrail.example/redirect",
+            },
+        })
 
-        expect(mockCreatePayment).not.toHaveBeenCalled()
+        await service.initiatePayment({
+            amount: 10,
+            currency_code: "eur",
+            context: { idempotency_key: "idem-url-components-", customer: { email: "customer@example.com" } },
+            data: {
+                session_id: "session-url-components",
+                redirect_success: "http://localhost:8888/api/capture-payment/cart_01KZEA5C9HSKGMS739ZB9V878C?x=1#complete",
+                redirect_cancel: "http://localhost:8888/api/cancel-payment/cart_01KZEA5C9HSKGMS739ZB9V878C?reason=user#cancelled",
+            },
+        } as any)
+
+        expect(mockCreatePayment).toHaveBeenCalledWith(
+            expect.objectContaining({
+                redirectUrls: {
+                    success: "http://localhost:8888/api/capture-payment/cart_01KZEA5C9HSKGMS739ZB9V878C?x=1#complete",
+                    cancel: "http://localhost:8888/api/cancel-payment/cart_01KZEA5C9HSKGMS739ZB9V878C?reason=user#cancelled",
+                },
+            })
+        )
     })
 
     it("uses redirect_success and redirect_cancel from input.data when provided", async () => {
