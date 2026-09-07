@@ -24,6 +24,9 @@ jobs:
         env:
           YARN_VERSION: "1.22"
 
+      - name: Lint
+        run: yarn lint
+
       - name: Run unit tests
         run: yarn test:unit
 
