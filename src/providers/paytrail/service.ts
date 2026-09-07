@@ -462,13 +462,13 @@ class PaytrailProviderService extends AbstractPaymentProvider<PaytrailOptions> {
 
   // methods below are not used in this provider, but need to be implemented to satisfy the interface
   async cancelPayment(input: CancelPaymentInput): Promise<CancelPaymentOutput> {
-    throw new Error("Method not implemented.")
+    throw new MedusaError(MedusaError.Types.NOT_ALLOWED, "Method not implemented.")
   }
   async retrievePayment(input: RetrievePaymentInput): Promise<RetrievePaymentOutput> {
-    throw new Error("Method not implemented.")
+    throw new MedusaError(MedusaError.Types.NOT_ALLOWED, "Method not implemented.")
   }
   async updatePayment(input: UpdatePaymentInput): Promise<UpdatePaymentOutput> {
-    throw new Error("Method not implemented.")
+    throw new MedusaError(MedusaError.Types.NOT_ALLOWED, "Method not implemented.")
   }
 }
 

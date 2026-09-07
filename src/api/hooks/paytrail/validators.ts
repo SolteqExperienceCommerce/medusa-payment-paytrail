@@ -1,4 +1,4 @@
-import { z } from "zod"
+import { z } from "@medusajs/framework/zod"
 
 /**
  * Validates Paytrail redirect/callback query parameters.
