@@ -35,6 +35,8 @@ import {
   CreatePaymentRequest as PaytrailCreatePaymentRequest,
   CreateRefundRequest as PaytrailCreateRefundRequest,
   Item as PaytrailItem,
+  Customer as PaytrailCustomer,
+  Address as PaytrailAddress,
 } from "@paytrail/paytrail-js-sdk"
 import { plainToInstance } from "class-transformer"
 import { randomUUID } from "crypto"
@@ -226,25 +228,49 @@ class PaytrailProviderService extends AbstractPaymentProvider<PaytrailOptions> {
     }
   }
 
-  // Fetches cart line items server-side, keyed off the trusted payment_session id
-  // (context.idempotency_key — set by Medusa core, never client-controllable), and maps
-  // them to Paytrail's items[]. Returns undefined (items omitted) on any lookup failure
-  // or if the mapped items don't sum to the payment amount, since items is optional for Paytrail.
+  // Maps a Medusa cart address to Paytrail's Address shape. All four fields are required by
+  // Paytrail, so an incomplete address (e.g. no postal code yet) is omitted rather than sent partial.
+  private toPaytrailAddress(address: any): PaytrailAddress | undefined {
+    if (!address?.address_1 || !address?.postal_code || !address?.city || !address?.country_code) {
+      return undefined
+    }
+
+    return {
+      streetAddress: address.address_2
+        ? `${address.address_1} ${address.address_2}`
+        : address.address_1,
+      postalCode: address.postal_code,
+      city: address.city,
+      country: String(address.country_code).toUpperCase(),
+      ...(address.province ? { county: address.province } : {}),
+    }
+  }
+
+  // Fetches cart data server-side, keyed off the trusted payment_session id (context.idempotency_key
+  // — set by Medusa core, never client-controllable), and maps it to Paytrail's optional items[],
+  // customer name/phone/company, deliveryAddress and invoicingAddress fields. Items are omitted if
+  // they don't sum to the payment amount, since Paytrail requires that; customer/address fields have
+  // no such constraint and are included independently whenever the cart data is available.
   //
   // Resolves Query from the app-wide `container` singleton (@medusajs/framework root export),
   // not `this.container`: the payment module only injects a hand-picked subset of dependencies
   // into its providers (logger, db manager, config, ...), never Query. The singleton is the
   // same root container Query gets registered on during app boot, so it works regardless of
   // the provider's own limited scope.
-  private async getCartItems(
+  private async getCartData(
     paymentSessionId: string,
     expectedAmountCents: number
-  ): Promise<PaytrailItem[] | undefined> {
+  ): Promise<{
+    items?: PaytrailItem[]
+    customer?: Partial<PaytrailCustomer>
+    deliveryAddress?: PaytrailAddress
+    invoicingAddress?: PaytrailAddress
+  }> {
     const query = medusaContainer.resolve<
       { graph: (config: Record<string, unknown>) => Promise<{ data: any[] }> } | undefined
     >(ContainerRegistrationKeys.QUERY, { allowUnregistered: true })
     if (!query) {
-      return undefined
+      return {}
     }
 
     try {
@@ -258,7 +284,7 @@ class PaytrailProviderService extends AbstractPaymentProvider<PaytrailOptions> {
 
       const cartId = paymentSession?.payment_collection?.cart?.id
       if (!cartId) {
-        return undefined
+        return {}
       }
 
       // Cart totals are calculated on the fly, not stored columns. Per Medusa's docs, that
@@ -271,6 +297,7 @@ class PaytrailProviderService extends AbstractPaymentProvider<PaytrailOptions> {
         entity: "cart",
         fields: [
           "total",
+          "email",
           "items.id",
           "items.title",
           "items.quantity",
@@ -284,57 +311,85 @@ class PaytrailProviderService extends AbstractPaymentProvider<PaytrailOptions> {
           "shipping_methods.total",
           "shipping_methods.subtotal",
           "shipping_methods.tax_total",
+          "billing_address.first_name",
+          "billing_address.last_name",
+          "billing_address.phone",
+          "billing_address.company",
+          "billing_address.address_1",
+          "billing_address.address_2",
+          "billing_address.city",
+          "billing_address.province",
+          "billing_address.postal_code",
+          "billing_address.country_code",
+          "shipping_address.address_1",
+          "shipping_address.address_2",
+          "shipping_address.city",
+          "shipping_address.province",
+          "shipping_address.postal_code",
+          "shipping_address.country_code",
         ],
         filters: { id: cartId },
       })
 
-      const cartItems = cart?.items
-      if (!cartItems?.length) {
-        return undefined
+      const contactAddress = cart?.billing_address ?? cart?.shipping_address
+      const customer: Partial<PaytrailCustomer> | undefined =
+        cart?.email || contactAddress
+          ? {
+              ...(cart?.email ? { email: cart.email } : {}),
+              ...(contactAddress?.first_name ? { firstName: contactAddress.first_name } : {}),
+              ...(contactAddress?.last_name ? { lastName: contactAddress.last_name } : {}),
+              ...(contactAddress?.phone ? { phone: contactAddress.phone } : {}),
+              ...(contactAddress?.company ? { companyName: contactAddress.company } : {}),
+            }
+          : undefined
+
+      let items: PaytrailItem[] | undefined
+      if (cart?.items?.length) {
+        const vatPercentage = (subtotal: BigNumberInput, taxTotal: BigNumberInput) =>
+          MathBN.gt(subtotal, 0)
+            ? MathBN.mult(MathBN.div(taxTotal, subtotal), 100).toNumber()
+            : 0
+
+        const mapped: PaytrailItem[] = [
+          ...cart.items.map((item: any) => ({
+            unitPrice: this.eurosToCents(MathBN.div(item.total, item.quantity)),
+            units: Number(item.quantity),
+            vatPercentage: vatPercentage(item.subtotal, item.tax_total),
+            productCode: String(item.variant_sku || item.product_id || item.id).slice(0, 100),
+            description: item.title,
+          })),
+          ...(cart.shipping_methods ?? []).map((method: any) => ({
+            unitPrice: this.eurosToCents(method.total),
+            units: 1,
+            vatPercentage: vatPercentage(method.subtotal, method.tax_total),
+            productCode: String(method.id).slice(0, 100),
+            description: method.name,
+          })),
+        ]
+
+        const sum = mapped.reduce((total, item) => total + item.unitPrice * item.units, 0)
+        if (sum === expectedAmountCents) {
+          items = mapped
+        } else {
+          this.logger.error(
+            "Paytrail: cart items do not sum to payment amount, omitting items",
+            { paymentSessionId, sum, expectedAmountCents, cartItems: cart.items, mappedItems: mapped }
+          )
+        }
       }
 
-      const vatPercentage = (subtotal: BigNumberInput, taxTotal: BigNumberInput) =>
-        MathBN.gt(subtotal, 0)
-          ? MathBN.mult(MathBN.div(taxTotal, subtotal), 100).toNumber()
-          : 0
-
-      const items = cartItems.map((item: any) => ({
-        unitPrice: this.eurosToCents(MathBN.div(item.total, item.quantity)),
-        units: Number(item.quantity),
-        vatPercentage: vatPercentage(item.subtotal, item.tax_total),
-        productCode: String(item.variant_sku || item.product_id || item.id).slice(0, 100),
-        description: item.title,
-      }))
-
-      const shippingItems = (cart?.shipping_methods ?? []).map((method: any) => ({
-        unitPrice: this.eurosToCents(method.total),
-        units: 1,
-        vatPercentage: vatPercentage(method.subtotal, method.tax_total),
-        productCode: String(method.id).slice(0, 100),
-        description: method.name,
-      }))
-
-      items.push(...shippingItems)
-
-      const sum = items.reduce(
-        (total: number, item: PaytrailItem) => total + item.unitPrice * item.units,
-        0
-      )
-      if (sum !== expectedAmountCents) {
-        this.logger.error(
-          "Paytrail: cart items do not sum to payment amount, omitting items",
-          { paymentSessionId, sum, expectedAmountCents, cartItems, mappedItems: items }
-        )
-        return undefined
+      return {
+        customer,
+        deliveryAddress: this.toPaytrailAddress(cart?.shipping_address),
+        invoicingAddress: this.toPaytrailAddress(cart?.billing_address),
+        ...(items ? { items } : {}),
       }
-
-      return items
     } catch (error: any) {
-      this.logger.error("Paytrail: failed to fetch cart items for payment request", {
+      this.logger.error("Paytrail: failed to fetch cart data for payment request", {
         paymentSessionId,
         error: error?.message,
       })
-      return undefined
+      return {}
     }
   }
 
@@ -351,36 +406,37 @@ class PaytrailProviderService extends AbstractPaymentProvider<PaytrailOptions> {
       )
     }
 
-    const email =
-      context?.customer?.email ??
-      (typeof input.data?.email === "string" ? input.data.email : undefined)
-
-    if (!email) {
-      throw new MedusaError(
-        MedusaError.Types.INVALID_DATA,
-        "Paytrail: a customer email is required to initiate payment"
-      )
-    }
-
-    const redirectUrls = this.getRedirectUrls(input.data)
-    if (!redirectUrls) {
-      throw new MedusaError(
-        MedusaError.Types.INVALID_DATA,
-        "Paytrail: input.data.redirect_success and input.data.redirect_cancel are required"
-      )
-    }
-
-    const callbackUrls = this.getCallbackUrls()
-    const callbackDelay = this.getCallbackDelay()
-
-    const stamp = context?.idempotency_key + randomUUID()
-    const amountCents = this.eurosToCents(amount)
-
-    const items = context?.idempotency_key
-      ? await this.getCartItems(context.idempotency_key, amountCents)
-      : undefined
-
     try {
+      const stamp = context?.idempotency_key + randomUUID()
+      const amountCents = this.eurosToCents(amount)
+
+      const cartData = context?.idempotency_key
+        ? await this.getCartData(context.idempotency_key, amountCents)
+        : {}
+
+      // Both sources are server-side: context.customer.email (authenticated checkout) and
+      // cartData.customer.email, i.e. cart.email (guest checkout). Client-supplied input.data.email
+      // is never trusted.
+      const email = context?.customer?.email ?? cartData.customer?.email
+
+      if (!email) {
+        throw new MedusaError(
+          MedusaError.Types.INVALID_DATA,
+          "Paytrail: a customer email is required to initiate payment"
+        )
+      }
+
+      const redirectUrls = this.getRedirectUrls(input.data)
+      if (!redirectUrls) {
+        throw new MedusaError(
+          MedusaError.Types.INVALID_DATA,
+          "Paytrail: input.data.redirect_success and input.data.redirect_cancel are required"
+        )
+      }
+
+      const callbackUrls = this.getCallbackUrls()
+      const callbackDelay = this.getCallbackDelay()
+
       const createPaymentRequest = plainToInstance(PaytrailCreatePaymentRequest, {
         stamp,
         reference: input.data?.session_id as string | undefined,
@@ -388,12 +444,15 @@ class PaytrailProviderService extends AbstractPaymentProvider<PaytrailOptions> {
         currency: currency_code.toUpperCase(),
         language: this.config.language,
         customer: {
+          ...cartData.customer,
           email,
         },
         redirectUrls,
         ...(callbackUrls ? { callbackUrls } : {}),
         ...(callbackDelay !== undefined ? { callbackDelay } : {}),
-        ...(items ? { items } : {}),
+        ...(cartData.items ? { items: cartData.items } : {}),
+        ...(cartData.deliveryAddress ? { deliveryAddress: cartData.deliveryAddress } : {}),
+        ...(cartData.invoicingAddress ? { invoicingAddress: cartData.invoicingAddress } : {}),
       })
 
       const response = await this.client.createPayment(createPaymentRequest)

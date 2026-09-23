@@ -221,6 +221,22 @@ describe("PaytrailProviderService", () => {
         expect(mockCreatePayment).not.toHaveBeenCalled()
     })
 
+    it("never trusts a client-supplied input.data.email — only server-side sources", async () => {
+        const service = buildService()
+
+        // Client sets data.email directly; no context.customer and no cart.email available.
+        await expect(
+            service.initiatePayment({
+                amount: 10,
+                currency_code: "eur",
+                context: { idempotency_key: "idem-untrusted-email-" },
+                data: { session_id: "session-untrusted-email", email: "attacker@example.com" },
+            } as any)
+        ).rejects.toThrow("Paytrail: a customer email is required to initiate payment")
+
+        expect(mockCreatePayment).not.toHaveBeenCalled()
+    })
+
     it("throws when redirect URL host is not whitelisted", async () => {
         const service = buildService()
 
@@ -542,6 +558,23 @@ describe("PaytrailProviderService", () => {
                                 tax_total: 0,
                             },
                         ],
+                        billing_address: {
+                            first_name: "Jane",
+                            last_name: "Doe",
+                            phone: "+358401234567",
+                            company: "Acme Oy",
+                            address_1: "Mannerheimintie 1",
+                            city: "Helsinki",
+                            postal_code: "00100",
+                            country_code: "fi",
+                        },
+                        shipping_address: {
+                            address_1: "Mannerheimintie 1",
+                            address_2: "Floor 3",
+                            city: "Helsinki",
+                            postal_code: "00100",
+                            country_code: "fi",
+                        },
                     },
                 ],
             }
@@ -598,6 +631,114 @@ describe("PaytrailProviderService", () => {
                         description: "Standard Shipping",
                     }),
                 ],
+                customer: {
+                    email: "customer@example.com",
+                    firstName: "Jane",
+                    lastName: "Doe",
+                    phone: "+358401234567",
+                    companyName: "Acme Oy",
+                },
+                invoicingAddress: {
+                    streetAddress: "Mannerheimintie 1",
+                    postalCode: "00100",
+                    city: "Helsinki",
+                    country: "FI",
+                },
+                deliveryAddress: {
+                    streetAddress: "Mannerheimintie 1 Floor 3",
+                    postalCode: "00100",
+                    city: "Helsinki",
+                    country: "FI",
+                },
+            })
+        )
+    })
+
+    it("omits an address when required fields are missing, but still includes what it has", async () => {
+        const mockGraph = jest.fn().mockImplementation(async ({ entity }: { entity: string }) => {
+            if (entity === "payment_session") {
+                return { data: [{ payment_collection: { cart: { id: "cart_incomplete_address" } } }] }
+            }
+            return {
+                data: [
+                    {
+                        billing_address: {
+                            first_name: "Jane",
+                            address_1: "Mannerheimintie 1",
+                            city: "Helsinki",
+                            // no postal_code or country_code — address is incomplete
+                        },
+                    },
+                ],
+            }
+        })
+        medusaContainer.register(ContainerRegistrationKeys.QUERY, asValue({ graph: mockGraph }))
+
+        const service = buildService()
+
+        mockCreatePayment.mockResolvedValue({
+            status: 200,
+            data: { transactionId: "trx-incomplete-address", href: "https://paytrail.example/redirect" },
+        })
+
+        await service.initiatePayment({
+            amount: 10,
+            currency_code: "eur",
+            context: { idempotency_key: "idem-incomplete-address-", customer: { email: "customer@example.com" } },
+            data: {
+                session_id: "session-incomplete-address",
+                redirect_success: "https://storefront.example/success",
+                redirect_cancel: "https://storefront.example/cancel",
+            },
+        } as any)
+
+        expect(mockCreatePayment).toHaveBeenCalledWith(
+            expect.objectContaining({
+                customer: { email: "customer@example.com", firstName: "Jane" },
+            })
+        )
+        expect(mockCreatePayment).toHaveBeenCalledWith(
+            expect.not.objectContaining({ invoicingAddress: expect.anything() })
+        )
+        expect(mockCreatePayment).toHaveBeenCalledWith(
+            expect.not.objectContaining({ deliveryAddress: expect.anything() })
+        )
+        expect(mockCreatePayment).toHaveBeenCalledWith(
+            expect.not.objectContaining({ items: expect.anything() })
+        )
+    })
+
+    it("falls back to the cart's email for guest checkout when context.customer is absent", async () => {
+        const mockGraph = jest.fn().mockImplementation(async ({ entity }: { entity: string }) => {
+            if (entity === "payment_session") {
+                return { data: [{ payment_collection: { cart: { id: "cart_guest" } } }] }
+            }
+            return { data: [{ email: "guest@example.com" }] }
+        })
+        medusaContainer.register(ContainerRegistrationKeys.QUERY, asValue({ graph: mockGraph }))
+
+        const service = buildService()
+
+        mockCreatePayment.mockResolvedValue({
+            status: 200,
+            data: { transactionId: "trx-guest-email", href: "https://paytrail.example/redirect" },
+        })
+
+        await service.initiatePayment({
+            amount: 10,
+            currency_code: "eur",
+            // no context.customer — matches a guest checkout, where Medusa never populates it
+            context: { idempotency_key: "idem-guest-email-" },
+            data: {
+                session_id: "session-guest-email",
+                redirect_success: "https://storefront.example/success",
+                redirect_cancel: "https://storefront.example/cancel",
+            },
+        } as any)
+
+        expect(mockCreatePayment).toHaveBeenCalledWith(
+            expect.objectContaining({
+                customer: { email: "guest@example.com" },
             })
         )
     })

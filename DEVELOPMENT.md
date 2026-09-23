@@ -77,7 +77,7 @@ Suggested flow:
 ## Known Gaps
 
 - Refund callback URLs are placeholder defaults if callback base URL is missing.
-- `createPayment` currently uses only mandatory Paytrail parameters; item-level payload data and shop-in-shop scenarios need additional implementation.
+- `createPayment` now includes cart items, shipping as an item row, customer name/phone/company, and delivery/invoicing addresses (all fetched server-side); shop-in-shop scenarios (`stamp`/`reference`/`merchant` on items) still need additional implementation.
 - Refund handling is incomplete for flows where Paytrail does not process the refund immediately.
 - `initiatePayment` error handling could include richer error context.
 - Security testing is still needed before production use.
