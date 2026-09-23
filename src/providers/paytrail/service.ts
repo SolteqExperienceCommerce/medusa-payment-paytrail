@@ -1,4 +1,11 @@
-import { AbstractPaymentProvider, MedusaError, BigNumber, MathBN } from "@medusajs/framework/utils"
+import {
+  AbstractPaymentProvider,
+  MedusaError,
+  BigNumber,
+  MathBN,
+  ContainerRegistrationKeys,
+} from "@medusajs/framework/utils"
+import { container as medusaContainer } from "@medusajs/framework"
 import type {
   AuthorizePaymentInput,
   AuthorizePaymentOutput,
@@ -27,6 +34,7 @@ import {
   PaytrailClient,
   CreatePaymentRequest as PaytrailCreatePaymentRequest,
   CreateRefundRequest as PaytrailCreateRefundRequest,
+  Item as PaytrailItem,
 } from "@paytrail/paytrail-js-sdk"
 import { plainToInstance } from "class-transformer"
 import { randomUUID } from "crypto"
@@ -218,6 +226,118 @@ class PaytrailProviderService extends AbstractPaymentProvider<PaytrailOptions> {
     }
   }
 
+  // Fetches cart line items server-side, keyed off the trusted payment_session id
+  // (context.idempotency_key — set by Medusa core, never client-controllable), and maps
+  // them to Paytrail's items[]. Returns undefined (items omitted) on any lookup failure
+  // or if the mapped items don't sum to the payment amount, since items is optional for Paytrail.
+  //
+  // Resolves Query from the app-wide `container` singleton (@medusajs/framework root export),
+  // not `this.container`: the payment module only injects a hand-picked subset of dependencies
+  // into its providers (logger, db manager, config, ...), never Query. The singleton is the
+  // same root container Query gets registered on during app boot, so it works regardless of
+  // the provider's own limited scope.
+  private async getCartItems(
+    paymentSessionId: string,
+    expectedAmountCents: number
+  ): Promise<PaytrailItem[] | undefined> {
+    const query = medusaContainer.resolve<
+      { graph: (config: Record<string, unknown>) => Promise<{ data: any[] }> } | undefined
+    >(ContainerRegistrationKeys.QUERY, { allowUnregistered: true })
+    if (!query) {
+      return undefined
+    }
+
+    try {
+      const {
+        data: [paymentSession],
+      } = await query.graph({
+        entity: "payment_session",
+        fields: ["payment_collection.cart.id"],
+        filters: { id: paymentSessionId },
+      })
+
+      const cartId = paymentSession?.payment_collection?.cart?.id
+      if (!cartId) {
+        return undefined
+      }
+
+      // Cart totals are calculated on the fly, not stored columns. Per Medusa's docs, that
+      // calculation only runs when the cart's own "total" field is requested — item and
+      // shipping method totals come along as a side effect of that, not by requesting
+      // items.total/shipping_methods.total on their own.
+      const {
+        data: [cart],
+      } = await query.graph({
+        entity: "cart",
+        fields: [
+          "total",
+          "items.id",
+          "items.title",
+          "items.quantity",
+          "items.total",
+          "items.subtotal",
+          "items.tax_total",
+          "items.product_id",
+          "items.variant_sku",
+          "shipping_methods.id",
+          "shipping_methods.name",
+          "shipping_methods.total",
+          "shipping_methods.subtotal",
+          "shipping_methods.tax_total",
+        ],
+        filters: { id: cartId },
+      })
+
+      const cartItems = cart?.items
+      if (!cartItems?.length) {
+        return undefined
+      }
+
+      const vatPercentage = (subtotal: BigNumberInput, taxTotal: BigNumberInput) =>
+        MathBN.gt(subtotal, 0)
+          ? MathBN.mult(MathBN.div(taxTotal, subtotal), 100).toNumber()
+          : 0
+
+      const items = cartItems.map((item: any) => ({
+        unitPrice: this.eurosToCents(MathBN.div(item.total, item.quantity)),
+        units: Number(item.quantity),
+        vatPercentage: vatPercentage(item.subtotal, item.tax_total),
+        productCode: String(item.variant_sku || item.product_id || item.id).slice(0, 100),
+        description: item.title,
+      }))
+
+      const shippingItems = (cart?.shipping_methods ?? []).map((method: any) => ({
+        unitPrice: this.eurosToCents(method.total),
+        units: 1,
+        vatPercentage: vatPercentage(method.subtotal, method.tax_total),
+        productCode: String(method.id).slice(0, 100),
+        description: method.name,
+      }))
+
+      items.push(...shippingItems)
+
+      const sum = items.reduce(
+        (total: number, item: PaytrailItem) => total + item.unitPrice * item.units,
+        0
+      )
+      if (sum !== expectedAmountCents) {
+        this.logger.error(
+          "Paytrail: cart items do not sum to payment amount, omitting items",
+          { paymentSessionId, sum, expectedAmountCents, cartItems, mappedItems: items }
+        )
+        return undefined
+      }
+
+      return items
+    } catch (error: any) {
+      this.logger.error("Paytrail: failed to fetch cart items for payment request", {
+        paymentSessionId,
+        error: error?.message,
+      })
+      return undefined
+    }
+  }
+
   // Triggered by: POST /store/payment-collections/:id/payment-sessions
   async initiatePayment(
     input: InitiatePaymentInput
@@ -254,12 +374,17 @@ class PaytrailProviderService extends AbstractPaymentProvider<PaytrailOptions> {
     const callbackDelay = this.getCallbackDelay()
 
     const stamp = context?.idempotency_key + randomUUID()
+    const amountCents = this.eurosToCents(amount)
+
+    const items = context?.idempotency_key
+      ? await this.getCartItems(context.idempotency_key, amountCents)
+      : undefined
 
     try {
       const createPaymentRequest = plainToInstance(PaytrailCreatePaymentRequest, {
         stamp,
         reference: input.data?.session_id as string | undefined,
-        amount: this.eurosToCents(amount),
+        amount: amountCents,
         currency: currency_code.toUpperCase(),
         language: this.config.language,
         customer: {
@@ -268,6 +393,7 @@ class PaytrailProviderService extends AbstractPaymentProvider<PaytrailOptions> {
         redirectUrls,
         ...(callbackUrls ? { callbackUrls } : {}),
         ...(callbackDelay !== undefined ? { callbackDelay } : {}),
+        ...(items ? { items } : {}),
       })
 
       const response = await this.client.createPayment(createPaymentRequest)

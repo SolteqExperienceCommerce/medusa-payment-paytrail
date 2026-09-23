@@ -1,5 +1,7 @@
 /// <reference types="jest" />
-import { MedusaError } from "@medusajs/framework/utils"
+import { MedusaError, ContainerRegistrationKeys } from "@medusajs/framework/utils"
+import { container as medusaContainer } from "@medusajs/framework"
+import { asValue } from "@medusajs/framework/awilix"
 import PaytrailProviderService from "../service"
 import type { PaytrailOptions } from "../types"
 
@@ -43,6 +45,12 @@ describe("PaytrailProviderService", () => {
 
     beforeEach(() => {
         jest.clearAllMocks()
+    })
+
+    afterEach(() => {
+        // getCartItems resolves Query from the real @medusajs/framework container singleton,
+        // not from the service's own constructor container — reset it so tests don't leak state.
+        medusaContainer.register(ContainerRegistrationKeys.QUERY, asValue(undefined))
     })
 
     it("validates required provider options", () => {
@@ -503,5 +511,168 @@ describe("PaytrailProviderService", () => {
         ).rejects.toThrow("Paytrail: input.data.redirect_success and input.data.redirect_cancel are required")
 
         expect(mockCreatePayment).not.toHaveBeenCalled()
+    })
+
+    it("includes cart and shipping items fetched from the server-side cart, keyed off the trusted payment_session id, when they match the amount", async () => {
+        const mockGraph = jest.fn().mockImplementation(async ({ entity }: { entity: string }) => {
+            if (entity === "payment_session") {
+                return { data: [{ payment_collection: { cart: { id: "cart_123" } } }] }
+            }
+            return {
+                data: [
+                    {
+                        items: [
+                            {
+                                id: "item-1",
+                                title: "T-Shirt",
+                                quantity: 2,
+                                total: 12.4,
+                                subtotal: 10,
+                                tax_total: 2.4,
+                                product_id: "prod_1",
+                                variant_sku: "SKU-1",
+                            },
+                        ],
+                        shipping_methods: [
+                            {
+                                id: "casm_1",
+                                name: "Standard Shipping",
+                                total: 5,
+                                subtotal: 5,
+                                tax_total: 0,
+                            },
+                        ],
+                    },
+                ],
+            }
+        })
+        medusaContainer.register(ContainerRegistrationKeys.QUERY, asValue({ graph: mockGraph }))
+
+        const service = buildService()
+
+        mockCreatePayment.mockResolvedValue({
+            status: 200,
+            data: { transactionId: "trx-cart-items", href: "https://paytrail.example/redirect" },
+        })
+
+        await service.initiatePayment({
+            amount: 17.4,
+            currency_code: "eur",
+            context: { idempotency_key: "idem-cart-items-", customer: { email: "customer@example.com" } },
+            data: {
+                session_id: "session-cart-items",
+                redirect_success: "https://storefront.example/success",
+                redirect_cancel: "https://storefront.example/cancel",
+            },
+        } as any)
+
+        expect(mockGraph).toHaveBeenCalledWith(
+            expect.objectContaining({
+                entity: "payment_session",
+                filters: { id: "idem-cart-items-" },
+            })
+        )
+        expect(mockGraph).toHaveBeenCalledWith(
+            expect.objectContaining({
+                entity: "cart",
+                // Regression guard: cart totals are only calculated when the cart's own
+                // "total" field is requested — item totals silently come back missing otherwise.
+                fields: expect.arrayContaining(["total"]),
+                filters: { id: "cart_123" },
+            })
+        )
+        expect(mockCreatePayment).toHaveBeenCalledWith(
+            expect.objectContaining({
+                items: [
+                    expect.objectContaining({
+                        unitPrice: 620,
+                        units: 2,
+                        vatPercentage: 24,
+                        productCode: "SKU-1",
+                    }),
+                    expect.objectContaining({
+                        unitPrice: 500,
+                        units: 1,
+                        vatPercentage: 0,
+                        productCode: "casm_1",
+                        description: "Standard Shipping",
+                    }),
+                ],
+            })
+        )
+    })
+
+    it("omits items when the fetched cart items do not sum to the payment amount", async () => {
+        const mockGraph = jest.fn().mockImplementation(async ({ entity }: { entity: string }) => {
+            if (entity === "payment_session") {
+                return { data: [{ payment_collection: { cart: { id: "cart_123" } } }] }
+            }
+            return {
+                data: [
+                    {
+                        items: [
+                            {
+                                id: "item-1",
+                                title: "T-Shirt",
+                                quantity: 1,
+                                total: 5,
+                                subtotal: 5,
+                                tax_total: 0,
+                                product_id: "prod_1",
+                            },
+                        ],
+                    },
+                ],
+            }
+        })
+        medusaContainer.register(ContainerRegistrationKeys.QUERY, asValue({ graph: mockGraph }))
+
+        const service = buildService()
+
+        mockCreatePayment.mockResolvedValue({
+            status: 200,
+            data: { transactionId: "trx-cart-mismatch", href: "https://paytrail.example/redirect" },
+        })
+
+        await service.initiatePayment({
+            amount: 99,
+            currency_code: "eur",
+            context: { idempotency_key: "idem-cart-mismatch-", customer: { email: "customer@example.com" } },
+            data: {
+                session_id: "session-cart-mismatch",
+                redirect_success: "https://storefront.example/success",
+                redirect_cancel: "https://storefront.example/cancel",
+            },
+        } as any)
+
+        expect(mockCreatePayment).toHaveBeenCalledWith(
+            expect.not.objectContaining({ items: expect.anything() })
+        )
+    })
+
+    it("omits items (without throwing) when Query is not registered in the container", async () => {
+        // Regression test: getCartItems must not assume Query is available — it resolves it
+        // with allowUnregistered so a deployment without it degrades gracefully instead of crashing.
+        const service = buildService()
+
+        mockCreatePayment.mockResolvedValue({
+            status: 200,
+            data: { transactionId: "trx-no-query", href: "https://paytrail.example/redirect" },
+        })
+
+        await service.initiatePayment({
+            amount: 10,
+            currency_code: "eur",
+            context: { idempotency_key: "idem-no-query-", customer: { email: "customer@example.com" } },
+            data: {
+                session_id: "session-no-query",
+                redirect_success: "https://storefront.example/success",
+                redirect_cancel: "https://storefront.example/cancel",
+            },
+        } as any)
+
+        expect(mockCreatePayment).toHaveBeenCalledWith(
+            expect.not.objectContaining({ items: expect.anything() })
+        )
     })
 })
