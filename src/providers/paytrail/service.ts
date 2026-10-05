@@ -302,15 +302,13 @@ class PaytrailProviderService extends AbstractPaymentProvider<PaytrailOptions> {
           "items.title",
           "items.quantity",
           "items.total",
-          "items.subtotal",
-          "items.tax_total",
+          "items.tax_lines.rate",
           "items.product_id",
           "items.variant_sku",
           "shipping_methods.id",
           "shipping_methods.name",
           "shipping_methods.total",
-          "shipping_methods.subtotal",
-          "shipping_methods.tax_total",
+          "shipping_methods.tax_lines.rate",
           "billing_address.first_name",
           "billing_address.last_name",
           "billing_address.phone",
@@ -345,23 +343,24 @@ class PaytrailProviderService extends AbstractPaymentProvider<PaytrailOptions> {
 
       let items: PaytrailItem[] | undefined
       if (cart?.items?.length) {
-        const vatPercentage = (subtotal: BigNumberInput, taxTotal: BigNumberInput) =>
-          MathBN.gt(subtotal, 0)
-            ? MathBN.mult(MathBN.div(taxTotal, subtotal), 100).toNumber()
-            : 0
+        // Read the rate from the stored tax lines. Deriving it from tax_total / subtotal breaks
+        // with promotions (subtotal is pre-discount, tax_total post-discount). Paytrail allows
+        // one decimal at most.
+        const vatPercentage = (taxLines?: { rate: number }[]) =>
+          Math.round((taxLines ?? []).reduce((sum, line) => sum + Number(line.rate), 0) * 10) / 10
 
         const mapped: PaytrailItem[] = [
           ...cart.items.map((item: any) => ({
             unitPrice: this.eurosToCents(MathBN.div(item.total, item.quantity)),
             units: Number(item.quantity),
-            vatPercentage: vatPercentage(item.subtotal, item.tax_total),
+            vatPercentage: vatPercentage(item.tax_lines),
             productCode: String(item.variant_sku || item.product_id || item.id).slice(0, 100),
             description: item.title,
           })),
           ...(cart.shipping_methods ?? []).map((method: any) => ({
             unitPrice: this.eurosToCents(method.total),
             units: 1,
-            vatPercentage: vatPercentage(method.subtotal, method.tax_total),
+            vatPercentage: vatPercentage(method.tax_lines),
             productCode: String(method.id).slice(0, 100),
             description: method.name,
           })),

@@ -542,9 +542,10 @@ describe("PaytrailProviderService", () => {
                                 id: "item-1",
                                 title: "T-Shirt",
                                 quantity: 2,
+                                // Discounted by a promotion: the rate must come from tax_lines,
+                                // not tax_total / subtotal (which gave e.g. 23.719...).
                                 total: 12.4,
-                                subtotal: 10,
-                                tax_total: 2.4,
+                                tax_lines: [{ rate: 25.5 }],
                                 product_id: "prod_1",
                                 variant_sku: "SKU-1",
                             },
@@ -554,8 +555,7 @@ describe("PaytrailProviderService", () => {
                                 id: "casm_1",
                                 name: "Standard Shipping",
                                 total: 5,
-                                subtotal: 5,
-                                tax_total: 0,
+                                tax_lines: [],
                             },
                         ],
                         billing_address: {
@@ -620,7 +620,7 @@ describe("PaytrailProviderService", () => {
                     expect.objectContaining({
                         unitPrice: 620,
                         units: 2,
-                        vatPercentage: 24,
+                        vatPercentage: 25.5,
                         productCode: "SKU-1",
                     }),
                     expect.objectContaining({
@@ -757,8 +757,7 @@ describe("PaytrailProviderService", () => {
                                 title: "T-Shirt",
                                 quantity: 1,
                                 total: 5,
-                                subtotal: 5,
-                                tax_total: 0,
+                                tax_lines: [],
                                 product_id: "prod_1",
                             },
                         ],
